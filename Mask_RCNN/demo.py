@@ -27,8 +27,8 @@ MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
 # Download COCO trained weights from Releases if needed
 if not os.path.exists(COCO_MODEL_PATH):
-	print 'downloading trained weights'
-    utils.download_trained_weights(COCO_MODEL_PATH)
+	print('downloading trained weights')
+	utils.download_trained_weights(COCO_MODEL_PATH)
 
 
 class InferenceConfig(coco.CocoConfig):
@@ -63,16 +63,15 @@ class_names = ['BG', 'person', 'bicycle', 'car', 'motorcycle', 'airplane',
                'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors',
                'teddy bear', 'hair drier', 'toothbrush']
 
-
-# Load a random image from the images folder
-imagepath = sys.argv[1]
-file_names = next(os.walk(imagepath))[2]
-for filename in file_names:
+def process_file(imagepath, filename):
 	if '.jpg' not in filename and '.png' not in filename and '.jpeg' not in filename:
-    continue
+		return []
 
 	print('processing %s' % filename)
 	image = skimage.io.imread(os.path.join(imagepath, filename))
+	outdir = os.path.join(imagepath, 'objects')
+	if not os.path.isdir(outdir):
+		os.mkdir(outdir)
 
 	# Run detection
 	results = model.detect([image], verbose=1)
@@ -83,6 +82,7 @@ for filename in file_names:
 	import imageio
 	N = r['rois'].shape[0]
 	scores = r['scores']
+	outputs = []
 	for i in range(N):
 		masked_image = image.copy()
 		print(len(image))
@@ -106,13 +106,25 @@ for filename in file_names:
 			0,
 			255)
 
-		(filefrag, ext) = os.path.basename(filename).split('.')
+		fileparts = os.path.basename(filename).split('.')
+		filefrag = '_'.join(fileparts[:-1])
 		ext = 'png'
 		newFilename = '%s-%s-%s-%s.%s' % (filefrag, i, label, score, ext)
 		print(newFilename)
 		#imageio.imwrite(newFilename, masked_image)
-		imageio.imwrite('objects/x-' + newFilename, masked_image[y1:y2, x1:x2])
+		output_filepath = os.path.join(outdir, 'x-' + newFilename)
+		imageio.imwrite(output_filepath, masked_image[y1:y2, x1:x2])
+		outputs.append(output_filepath)
 
+	return outputs
 
 	# visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],
 	                            # class_names, )
+
+if __name__ == '__main__':
+	# Load a random image from the images folder
+	imagepath = sys.argv[1]
+	file_names = next(os.walk(imagepath))[2]
+	for filename in file_names:
+		process_file(imagepath, filename)
+	
