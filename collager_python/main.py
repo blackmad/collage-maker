@@ -7,7 +7,15 @@ import os
 import math
 import tempfile
 import face_recognition
+import cv2
+import skimage
+import numpy as np
+import PIL
+import PIL.Image
+import sys
+import dataset
 
+db = dataset.connect('sqlite:///memoize.sqlite')
 
 
 def get_files_with_extension(directory, extension):
@@ -18,9 +26,10 @@ def get_files_with_extension(directory, extension):
                 ret.append(os.path.join(root, file))
     return ret
 
+
 def scaleImageInPlace(img, scale):
     scaled_img = cairo.ImageSurface(
-      cairo.FORMAT_ARGB32, int(scale*img.get_width()), int(scale*img.get_height()))
+        cairo.FORMAT_ARGB32, int(scale*img.get_width()), int(scale*img.get_height()))
 
     context = cairo.Context(scaled_img)
     context.scale(scale, scale)
@@ -28,9 +37,10 @@ def scaleImageInPlace(img, scale):
     context.paint()
     return scaled_img
 
+
 def kindaFlipImageInPlace(img):
     scaled_img = cairo.ImageSurface(
-      cairo.FORMAT_ARGB32, img.get_width(), img.get_height())
+        cairo.FORMAT_ARGB32, img.get_width(), img.get_height())
     context = cairo.Context(scaled_img)
     context.translate(img.get_width(), img.get_height())
 
@@ -40,44 +50,50 @@ def kindaFlipImageInPlace(img):
     return scaled_img
 
 
-
-
-
-
 def makeRound(context, img, centerX, centerY, numSteps, offsetRadius, offsetSteps):
     circumference = 2 * offsetRadius * math.pi
-    sliceSize = circumference / numSteps
+    sliceSize = max(circumference / numSteps, 25)
 
     scale = sliceSize / img.get_width()
     scaledImage = scaleImageInPlace(img, scale)
-    scaledImage = kindaFlipImageInPlace(scaledImage)
+    # scaledImage = kindaFlipImageInPlace(scaledImage)
 
-    context.arc(centerX, centerY, offsetRadius,
-                0, math.pi*2)
-    context.set_source_rgb(0, 1, 0)
-    context.set_line_width(1)
-    context.stroke()
+    # context.arc(centerX, centerY, offsetRadius,
+    #             0, math.pi*2)
+    # context.set_source_rgb(0, 1, 0)
+    # context.set_line_width(1)
+    # context.stroke()
 
     stepSizeRads = 2*math.pi/numSteps
     for i in range(0, numSteps):
-        context.arc(centerX, centerY, offsetRadius,
-                    (offsetSteps * stepSizeRads) + stepSizeRads*i, (offsetSteps * stepSizeRads) + stepSizeRads*i+1)
-        context.set_source_rgb(1, 0, 0)
-        context.set_line_width(1)
-        context.stroke()
+        # context.arc(centerX, centerY, offsetRadius,
+        #             (offsetSteps * stepSizeRads) + stepSizeRads*i, (offsetSteps * stepSizeRads) + stepSizeRads*i+1)
+        # context.set_source_rgb(1, 0, 0)
+        # context.set_line_width(1)
+        # context.stroke()
 
         context.save()
         context.translate(centerX, centerY)
         context.rotate((offsetSteps * stepSizeRads) + (i*stepSizeRads))
 
+        #center it in the slot
         context.translate(-scaledImage.get_width()/2, 0)
+        # move it out to the circle
         context.translate(0, offsetRadius)
+        # but not all the way
+        # context.translate(-scaledImage.get_height()/2, 0)
 
+        context.save()
+        context.scale(1, scaledImage.get_height() /  scaledImage.get_width())
+        context.arc(scaledImage.get_width()/2, scaledImage.get_width()/4, scaledImage.get_width(), 0, math.pi*2)
+        context.set_source_rgb(1, 1, 1)
+        context.fill()
+        context.restore()
 
         context.set_source_surface(scaledImage, 0, 0)
         context.paint()
 
-        context.restore()        
+        context.restore()
 
 
 def makeAngledMask(img, angle):
@@ -108,7 +124,8 @@ def makeAngledMask(img, angle):
 
 
 def showSurface(surface):
-    tmpfile = tempfile.NamedTemporaryFile(dir='/tmp', suffix='.png', delete=False)
+    tmpfile = tempfile.NamedTemporaryFile(
+        dir='/tmp', suffix='.png', delete=False)
     temp_file_name = tmpfile.name
     surface.write_to_png(temp_file_name)
     subprocess.call(['open', temp_file_name])
@@ -119,52 +136,98 @@ size_x = 2200
 size_y = 2200
 files = get_files_with_extension(directory, 'png')
 
+def outlineImage(imgFile):
+  orig_img = skimage.io.imread(imgFile)
+  kernel = np.ones((20,20),np.uint8)
+  orig_img = orig_img[:,:,3]
+  dilation = cv2.dilate(orig_img,kernel,iterations = 1)
+
+  orig_img = skimage.io.imread(imgFile)
+  orig_img[:,:,0] = dilation
+  orig_img[:,:,1] = dilation
+  orig_img[:,:,2] = dilation
+  orig_img[:,:,3] = dilation
+
+  orig_img_pil = PIL.Image.open(imgFile)
+  outline_img_pil = PIL.Image.fromarray(orig_img)
+  outline_img_pil.paste(orig_img_pil, mask=orig_img_pil)
+  return pil2cairo(outline_img_pil)
+
+def pil2cairo(im):
+    """Transform a PIL Image into a Cairo ImageSurface."""
+
+    # assert sys.byteorder == 'little', 'We don\'t support big endian'
+    # if im.mode != 'RGBA':
+    #     im = im.convert('RGBA')
+
+    # arr = np.array(im)
+    # height, width, channels = arr.shape
+    # surface = cairo.ImageSurface.create_for_data(arr, cairo.FORMAT_RGB24, width, height)
+    # return surface
+    tmpfile = tempfile.NamedTemporaryFile(
+        dir='/tmp', suffix='.png', delete=False)
+    temp_file_name = tmpfile.name
+    im.save(temp_file_name)
+    image_surface = cairo.ImageSurface.create_from_png(temp_file_name)
+    return image_surface
+
+def hasFace(filename):
+    table = db['has_face']
+    has_face_record = table.find_one(filename=filename)
+    if has_face_record:
+      return has_face_record['has_face']
+
+    image = face_recognition.load_image_file(filename)
+    face_locations = face_recognition.face_locations(image)
+    has_face = (face_locations is not None) and (len(face_locations) > 0)
+    print('%s has face? %s' % (filename, has_face))
+    table.insert(dict(filename=filename, has_face=has_face))
+    return has_face
 
 def doMain():
-  radiusMoveSize = 25
-  offsetRadius = 1000
-  offsetSteps = 0
-  ringCount = 1
-  numSteps = 10
+    radiusMoveSize = 50
+    offsetRadius = 1000
+    offsetSteps = 0
+    ringCount = 1
+    numSteps = 10
+    minRadius = 0
 
-  surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size_x, size_y)
-  context = cairo.Context(surface)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size_x, size_y)
+    context = cairo.Context(surface)
 
-  while offsetRadius > 0:
-      filename = files.pop()
-      # img = Image.new('RGB', (size_x, size_y), color = 'white')
-      # im = Image.open(files[0])
-      # im.rotate(10, expand=True)
+    while offsetRadius >= minRadius:
+        filename = files.pop()
+        # img = Image.new('RGB', (size_x, size_y), color = 'white')
+        # im = Image.open(files[0])
+        # im.rotate(10, expand=True)
 
-      image_surface = cairo.ImageSurface.create_from_png(filename)
-      if image_surface.get_width() > image_surface.get_height():
-        print('skipping, wider than tall')
-        continue
+        image_surface = cairo.ImageSurface.create_from_png(filename)
+        if image_surface.get_width() > image_surface.get_height():
+            print('skipping, wider than tall')
+            continue
 
-      if check_Fa
-      image = face_recognition.load_image_file(filename)
-      face_locations = face_recognition.face_locations(image)
-      if not face_locations or len(face_locations) == 0:
-        print('skipping due to no face')
-        continue
+        if not hasFace(filename):
+            print('skipping due to no face')
+            continue
 
-      print(filename)
+        print(filename)
+        image_surface = outlineImage(filename)
 
-      makeRound(context=context, img=image_surface, centerX=size_x/2,
-                centerY=size_y/2, numSteps=numSteps, offsetRadius=offsetRadius, offsetSteps=offsetSteps)
+        makeRound(context=context, img=image_surface, centerX=size_x/2,
+                  centerY=size_y/2, numSteps=numSteps, offsetRadius=offsetRadius, offsetSteps=offsetSteps)
 
-      offsetRadius -= radiusMoveSize
-      offsetSteps += 0.5
-      ringCount += 1
+        offsetRadius -= radiusMoveSize
+        offsetSteps += 0.5
+        ringCount += 1
 
-      if ringCount % 3 == 0:
-        numSteps *= 2
-        offsetSteps = 0.5
-      if ringCount % 3 == 1:
-        numSteps = int(0.5*numSteps)
-        offsetSteps = 0
+        if ringCount % 3 == 0:
+            numSteps *= 2
+            offsetSteps = 0.5
+        if ringCount % 3 == 1:
+            numSteps = int(0.5*numSteps)
+            offsetSteps = 0
 
+    showSurface(surface)
 
-  showSurface(surface)
 
 doMain()
