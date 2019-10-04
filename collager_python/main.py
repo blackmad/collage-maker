@@ -60,7 +60,7 @@ def makeRound(context, filename, img, centerX, centerY, numSteps, offsetRadius, 
 
     scale = sliceSize / img.get_width()
     scaledImage = scaleImageInPlace(img, scale)
-    # scaledImage = kindaFlipImageInPlace(scaledImage)
+    scaledImage = kindaFlipImageInPlace(scaledImage)
 
     # context.arc(centerX, centerY, offsetRadius,
     #             0, math.pi*2)
@@ -250,7 +250,7 @@ def doMain():
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size_x, size_y)
     context = cairo.Context(surface)
 
-    # random.shuffle(files)
+    random.shuffle(files)
 
     while offsetRadius >= minRadius:
         filename = files.pop()
@@ -277,7 +277,7 @@ def doMain():
         if ringCount % 3 == 0:
             numSteps *= 2
             offsetSteps = 0.5
-            offsetRadius += radiusMoveSize
+            offsetRadius += radiusMoveSize*1.5
         if ringCount % 3 == 1:
             numSteps = int(0.5*numSteps)
             offsetSteps = 0
