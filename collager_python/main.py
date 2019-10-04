@@ -14,6 +14,10 @@ import PIL
 import PIL.Image
 import sys
 import dataset
+import random
+import pickle
+from background_color_detector import BackgroundColorDetector
+from colorthief import ColorThief
 
 db = dataset.connect('sqlite:///memoize.sqlite')
 
@@ -50,7 +54,7 @@ def kindaFlipImageInPlace(img):
     return scaled_img
 
 
-def makeRound(context, img, centerX, centerY, numSteps, offsetRadius, offsetSteps):
+def makeRound(context, filename, img, centerX, centerY, numSteps, offsetRadius, offsetSteps):
     circumference = 2 * offsetRadius * math.pi
     sliceSize = max(circumference / numSteps, 25)
 
@@ -76,19 +80,43 @@ def makeRound(context, img, centerX, centerY, numSteps, offsetRadius, offsetStep
         context.translate(centerX, centerY)
         context.rotate((offsetSteps * stepSizeRads) + (i*stepSizeRads))
 
-        #center it in the slot
+        # center it in the slot
         context.translate(-scaledImage.get_width()/2, 0)
         # move it out to the circle
         context.translate(0, offsetRadius)
         # but not all the way
         # context.translate(-scaledImage.get_height()/2, 0)
 
+        # this code is all for drawing the surrounding circles
         context.save()
-        context.scale(1, scaledImage.get_height() /  scaledImage.get_width())
-        context.arc(scaledImage.get_width()/2, scaledImage.get_width()/4, scaledImage.get_width(), 0, math.pi*2)
-        context.set_source_rgb(1, 1, 1)
+
+        context.scale(1, scaledImage.get_height() / scaledImage.get_width())
+
+        colorPalette = getColorPalette(filename)
+
+        # the border circle
+        context.arc(scaledImage.get_width()/2, scaledImage.get_width() /
+                    4, scaledImage.get_width()+10, 0, math.pi*2)
+
+        context.set_source_rgb(0, 0, 0)
+        averageColor = colorPalette[1]
+        context.set_source_rgb(averageColor[0]*1.0 / 256.0,
+                               averageColor[1]*1.0 / 256.0,
+                               averageColor[2]*1.0 / 256.0)
         context.fill()
+
+        # the inner circle
+        context.arc(scaledImage.get_width()/2, scaledImage.get_width() /
+                    4, scaledImage.get_width(), 0, math.pi*2)
+        context.set_source_rgb(1, 1, 1)
+        averageColor = colorPalette[0]
+        context.set_source_rgb(averageColor[0]*1.0 / 256.0,
+                               averageColor[1]*1.0 / 256.0,
+                               averageColor[2]*1.0 / 256.0)
+        context.fill()
+
         context.restore()
+        # end circle/oval code
 
         context.set_source_surface(scaledImage, 0, 0)
         context.paint()
@@ -136,22 +164,24 @@ size_x = 2200
 size_y = 2200
 files = get_files_with_extension(directory, 'png')
 
+
 def outlineImage(imgFile):
-  orig_img = skimage.io.imread(imgFile)
-  kernel = np.ones((20,20),np.uint8)
-  orig_img = orig_img[:,:,3]
-  dilation = cv2.dilate(orig_img,kernel,iterations = 1)
+    orig_img = skimage.io.imread(imgFile)
+    kernel = np.ones((20, 20), np.uint8)
+    orig_img = orig_img[:, :, 3]
+    dilation = cv2.dilate(orig_img, kernel, iterations=1)
 
-  orig_img = skimage.io.imread(imgFile)
-  orig_img[:,:,0] = dilation
-  orig_img[:,:,1] = dilation
-  orig_img[:,:,2] = dilation
-  orig_img[:,:,3] = dilation
+    orig_img = skimage.io.imread(imgFile)
+    orig_img[:, :, 0] = dilation
+    orig_img[:, :, 1] = dilation
+    orig_img[:, :, 2] = dilation
+    orig_img[:, :, 3] = dilation
 
-  orig_img_pil = PIL.Image.open(imgFile)
-  outline_img_pil = PIL.Image.fromarray(orig_img)
-  outline_img_pil.paste(orig_img_pil, mask=orig_img_pil)
-  return pil2cairo(outline_img_pil)
+    orig_img_pil = PIL.Image.open(imgFile)
+    outline_img_pil = PIL.Image.fromarray(orig_img)
+    outline_img_pil.paste(orig_img_pil, mask=orig_img_pil)
+    return pil2cairo(outline_img_pil)
+
 
 def pil2cairo(im):
     """Transform a PIL Image into a Cairo ImageSurface."""
@@ -171,18 +201,40 @@ def pil2cairo(im):
     image_surface = cairo.ImageSurface.create_from_png(temp_file_name)
     return image_surface
 
-def hasFace(filename):
-    table = db['has_face']
+
+def checkMemoization(filename, tableName, cb):
+    table = db[tableName]
     has_face_record = table.find_one(filename=filename)
     if has_face_record:
-      return has_face_record['has_face']
+        return pickle.loads(has_face_record['value'])
+    else:
+        value = cb(filename)
+        table.insert(dict(filename=filename, value=pickle.dumps(value)))
+        return value
 
+
+def getAverageColor(filename):
+    return checkMemoization(
+        filename, 'average_color', 
+        lambda filename: ColorThief(filename).get_color(quality=3))
+
+
+def getColorPalette(filename):
+    return checkMemoization(filename, 'color_palette',
+                            lambda filename: ColorThief(filename).get_palette(color_count=3, quality=3))
+
+
+def hasFace(filename):
+    return checkMemoization(filename, 'has_face', hasFaceHelper)
+
+
+def hasFaceHelper(filename):
     image = face_recognition.load_image_file(filename)
     face_locations = face_recognition.face_locations(image)
     has_face = (face_locations is not None) and (len(face_locations) > 0)
     print('%s has face? %s' % (filename, has_face))
-    table.insert(dict(filename=filename, has_face=has_face))
     return has_face
+
 
 def doMain():
     radiusMoveSize = 50
@@ -190,16 +242,18 @@ def doMain():
     offsetSteps = 0
     ringCount = 1
     numSteps = 10
-    minRadius = 0
+    minRadius = 50
+
+    # offsetRadius = 800
+    # minRadius = 700
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size_x, size_y)
     context = cairo.Context(surface)
 
+    # random.shuffle(files)
+
     while offsetRadius >= minRadius:
         filename = files.pop()
-        # img = Image.new('RGB', (size_x, size_y), color = 'white')
-        # im = Image.open(files[0])
-        # im.rotate(10, expand=True)
 
         image_surface = cairo.ImageSurface.create_from_png(filename)
         if image_surface.get_width() > image_surface.get_height():
@@ -211,9 +265,9 @@ def doMain():
             continue
 
         print(filename)
-        image_surface = outlineImage(filename)
+        # image_surface = outlineImage(filename)
 
-        makeRound(context=context, img=image_surface, centerX=size_x/2,
+        makeRound(context=context, filename=filename, img=image_surface, centerX=size_x/2,
                   centerY=size_y/2, numSteps=numSteps, offsetRadius=offsetRadius, offsetSteps=offsetSteps)
 
         offsetRadius -= radiusMoveSize
@@ -223,6 +277,7 @@ def doMain():
         if ringCount % 3 == 0:
             numSteps *= 2
             offsetSteps = 0.5
+            offsetRadius += radiusMoveSize
         if ringCount % 3 == 1:
             numSteps = int(0.5*numSteps)
             offsetSteps = 0
