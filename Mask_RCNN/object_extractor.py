@@ -1,4 +1,8 @@
 
+import coco
+from mrcnn import visualize
+import mrcnn.model as modellib
+from mrcnn import utils
 import os
 import sys
 import random
@@ -13,12 +17,8 @@ ROOT_DIR = os.path.abspath("./")
 
 # Import Mask RCNN
 # sys.path.append(ROOT_DIR)  # To find local version of the library
-from mrcnn import utils
-import mrcnn.model as modellib
-from mrcnn import visualize
 # Import COCO config
 sys.path.append(os.path.join(ROOT_DIR, "coco/"))  # To find local version
-import coco
 
 # Directory to save logs and trained model
 MODEL_DIR = os.path.join(ROOT_DIR, "logs")
@@ -36,6 +36,7 @@ class InferenceConfig(coco.CocoConfig):
     # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
     GPU_COUNT = 1
     IMAGES_PER_GPU = 1
+
 
 config = InferenceConfig()
 config.display()
@@ -63,11 +64,11 @@ class_names = ['BG', 'person', 'bicycle', 'car', 'motorcycle', 'airplane',
                'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors',
                'teddy bear', 'hair drier', 'toothbrush']
 
+
 def process_image(imagepath, filename, image):
 	outdir = os.path.join(imagepath, 'objects')
 	if not os.path.isdir(outdir):
 		os.mkdir(outdir)
-  
 
 	# Run detection
 	results = model.detect([image], verbose=1)
@@ -96,7 +97,8 @@ def process_image(imagepath, filename, image):
 		# 		0,
 		# 		image[:, :, c])
 		if len(image[0][0]) == 3:
-			masked_image = np.dstack( ( masked_image, np.zeros((len(image), len(image[0])))))
+			masked_image = np.dstack(
+			    (masked_image, np.zeros((len(image), len(image[0])))))
 
 		masked_image[:, :, 3] = np.where(mask == False,
 			0,
@@ -107,7 +109,7 @@ def process_image(imagepath, filename, image):
 		ext = 'png'
 		newFilename = '%s-%s-%s-%s.%s' % (label, filefrag, i, score, ext)
 		print(newFilename)
-		#imageio.imwrite(newFilename, masked_image)
+		# imageio.imwrite(newFilename, masked_image)
 		output_filepath = os.path.join(outdir, 'x-' + newFilename)
 		imageio.imwrite(output_filepath, masked_image[y1:y2, x1:x2])
 		outputs.append(output_filepath)
@@ -117,6 +119,7 @@ def process_image(imagepath, filename, image):
 	# visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],
 	                            # class_names, )
 
+
 def process_file(imagepath, filename):
 	if '.jpg' not in filename and '.png' not in filename and '.jpeg' not in filename:
 		return []
@@ -124,6 +127,7 @@ def process_file(imagepath, filename):
 	print('processing %s' % filename)
 	image = skimage.io.imread(os.path.join(imagepath, filename))
 	return process_image(imagepath, filename, image)
+
 
 if __name__ == '__main__':
 	# Load a random image from the images folder
