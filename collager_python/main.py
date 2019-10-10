@@ -1,4 +1,5 @@
 # kaleidoscope https://github.com/hugovk/pixel-tools/blob/master/kaleidoscope.py
+# blue contours https://stackoverflow.com/questions/55066764/how-to-blur-feather-the-edges-of-an-object-in-an-image-using-opencv
 # from PIL import Image
 
 import subprocess
@@ -42,25 +43,119 @@ def scaleImageInPlace(img, scale):
     return scaled_img
 
 
-def kindaFlipImageInPlace(img):
-    scaled_img = cairo.ImageSurface(
-        cairo.FORMAT_ARGB32, img.get_width(), img.get_height())
-    context = cairo.Context(scaled_img)
-    context.translate(img.get_width(), img.get_height())
+def mirrorSurfaceAcrossY(image_surface):
+    s = cairo.ImageSurface(
+        cairo.FORMAT_ARGB32, image_surface.get_width(), image_surface.get_height())
+    c = cairo.Context(s)
 
-    context.rotate(math.pi)
-    context.set_source_surface(img, 0, 0)
-    context.paint()
-    return scaled_img
+    # invert x coordinates?
+    m = cairo.Matrix(xx=-1, x0=image_surface.get_width())
+    c.transform(m)
+    c.set_source_surface(image_surface, 0, 0)
+    c.paint()
+    return s
+
+
+def mirrorSurfaceAcrossX(image_surface):
+    s = cairo.ImageSurface(
+        cairo.FORMAT_ARGB32, image_surface.get_width(), image_surface.get_height())
+    c = cairo.Context(s)
+
+    # invert y coordinates?
+    m = cairo.Matrix(yy=-1, y0=image_surface.get_height())
+    c.transform(m)
+    c.set_source_surface(image_surface, 0, 0)
+    c.paint()
+    return s
+
+def scaleDownRGB(rgb):
+    return (rgb[0]*1.0 / 256, rgb[1]*1.0 / 256, rgb[2]*1.0 / 256)
+
+
+def circleHaloImage(context, filename, scaledImage):
+    colorPalette = getColorPalette(filename)
+
+    borderColor = scaleDownRGB(colorPalette[1])
+    backgroundColor = scaleDownRGB(colorPalette[0])
+
+    fatCenterX = scaledImage.get_width() / 2
+    fatCenterY = scaledImage.get_width() / 4
+    fatRadius = scaledImage.get_width()
+
+    # draw a fat border cicle
+    context.set_source_rgb(*borderColor)
+    context.save()
+    context.scale(1, (scaledImage.get_height() / scaledImage.get_width()*0.7))
+    context.arc(fatCenterX, fatCenterY, fatRadius+10, 0, math.pi*2)
+    context.fill()
+    context.restore()
+    # draw a thin border cicle
+    context.save()
+    context.scale(0.75, (scaledImage.get_height() /
+                         scaledImage.get_width())*0.9)
+    context.arc(fatCenterX*(1/0.75), fatCenterY, fatRadius+10, 0, math.pi*2)
+    context.fill()
+    context.restore()
+
+    # draw a fat background cicle
+    context.set_source_rgb(*backgroundColor)
+    context.save()
+    context.scale(1, (scaledImage.get_height() / scaledImage.get_width()*0.7))
+    context.arc(fatCenterX, fatCenterY, fatRadius, 0, math.pi*2)
+    context.fill()
+    context.restore()
+    # draw a thin background cicle
+    context.save()
+    context.scale(0.75, (scaledImage.get_height() /
+                         scaledImage.get_width())*0.9)
+    context.arc(fatCenterX*(1/0.75), fatCenterY, fatRadius, 0, math.pi*2)
+    context.fill()
+    context.restore()
+
+
+def ellipseHaloImage1(context, filename, scaledImage):
+    colorPalette = getColorPalette(filename)
+
+    borderColor = scaleDownRGB(colorPalette[1])
+    backgroundColor = scaleDownRGB(colorPalette[0])
+
+    fatCenterX = scaledImage.get_width() / 2
+    fatCenterY = scaledImage.get_width() / 4
+    fatRadius = scaledImage.get_width()
+
+    # draw a fat border cicle
+    context.set_source_rgb(*borderColor)
+    context.save()
+    context.scale(1, (scaledImage.get_height() / scaledImage.get_width()*0.9))
+    context.arc(fatCenterX, fatCenterY, fatRadius+10, 0, math.pi*2)
+    context.fill()
+    context.restore()
+
+    # draw a fat background cicle
+    context.set_source_rgb(*backgroundColor)
+    context.save()
+    context.scale(1, (scaledImage.get_height() / scaledImage.get_width()*0.9))
+    context.arc(fatCenterX, fatCenterY, fatRadius, 0, math.pi*2)
+    context.fill()
+    context.restore()
 
 
 def makeRound(context, filename, img, centerX, centerY, numSteps, offsetRadius, offsetSteps):
     circumference = 2 * offsetRadius * math.pi
     sliceSize = max(circumference / numSteps, 25)
 
+    average_color = getColorPalette(filename)[0]
+    print(average_color)
+    img = outlineImage(filename, 80, color=average_color)
+
     scale = sliceSize / img.get_width()
-    scaledImage = scaleImageInPlace(img, scale)
-    scaledImage = kindaFlipImageInPlace(scaledImage)
+    print('scale', scale)
+    print(0.25*offsetRadius / img.get_height())
+    # scale = min(scale, 0.25*offsetRadius / img.get_height())
+    scaledImage1 = scaleImageInPlace(img, scale)
+    # scaledImage1 = mirrorSurfaceAcrossX(scaledImage1)
+    scaledImage2 = mirrorSurfaceAcrossY(scaledImage1)
+    scaledImages = [scaledImage1, scaledImage2]
 
     # context.arc(centerX, centerY, offsetRadius,
     #             0, math.pi*2)
@@ -70,6 +165,7 @@ def makeRound(context, filename, img, centerX, centerY, numSteps, offsetRadius, 
 
     stepSizeRads = 2*math.pi/numSteps
     for i in range(0, numSteps):
+        scaledImage = scaledImages[i % len(scaledImages)]
         # context.arc(centerX, centerY, offsetRadius,
         #             (offsetSteps * stepSizeRads) + stepSizeRads*i, (offsetSteps * stepSizeRads) + stepSizeRads*i+1)
         # context.set_source_rgb(1, 0, 0)
@@ -87,36 +183,7 @@ def makeRound(context, filename, img, centerX, centerY, numSteps, offsetRadius, 
         # but not all the way
         # context.translate(-scaledImage.get_height()/2, 0)
 
-        # this code is all for drawing the surrounding circles
-        context.save()
-
-        context.scale(1, scaledImage.get_height() / scaledImage.get_width())
-
-        colorPalette = getColorPalette(filename)
-
-        # the border circle
-        context.arc(scaledImage.get_width()/2, scaledImage.get_width() /
-                    4, scaledImage.get_width()+10, 0, math.pi*2)
-
-        context.set_source_rgb(0, 0, 0)
-        averageColor = colorPalette[1]
-        context.set_source_rgb(averageColor[0]*1.0 / 256.0,
-                               averageColor[1]*1.0 / 256.0,
-                               averageColor[2]*1.0 / 256.0)
-        context.fill()
-
-        # the inner circle
-        context.arc(scaledImage.get_width()/2, scaledImage.get_width() /
-                    4, scaledImage.get_width(), 0, math.pi*2)
-        context.set_source_rgb(1, 1, 1)
-        averageColor = colorPalette[0]
-        context.set_source_rgb(averageColor[0]*1.0 / 256.0,
-                               averageColor[1]*1.0 / 256.0,
-                               averageColor[2]*1.0 / 256.0)
-        context.fill()
-
-        context.restore()
-        # end circle/oval code
+        # ellipseHaloImage1(context=context, scaledImage=scaledImage, filename=filename)
 
         context.set_source_surface(scaledImage, 0, 0)
         context.paint()
@@ -165,23 +232,61 @@ size_y = 2200
 files = get_files_with_extension(directory, 'png')
 
 
-def outlineImage(imgFile):
-    orig_img = skimage.io.imread(imgFile)
-    kernel = np.ones((20, 20), np.uint8)
-    orig_img = orig_img[:, :, 3]
-    dilation = cv2.dilate(orig_img, kernel, iterations=1)
+def resizeImageWithTransparencyNumpy(im, border=20):
+  # im = cv2.imread(filename, -1)
+  old_size = im.shape[:2] # old_size is in (height, width) format
+  new_size = tuple([int(x+100) for x in old_size])
+  im = cv2.resize(im, (new_size[1], new_size[0]))
+  delta_w = new_size[1] - old_size[1]
+  delta_h = new_size[0] - old_size[0]
+  top, bottom = delta_h//2, delta_h-(delta_h//2)
+  left, right = delta_w//2, delta_w-(delta_w//2)
 
-    orig_img = skimage.io.imread(imgFile)
-    orig_img[:, :, 0] = dilation
-    orig_img[:, :, 1] = dilation
-    orig_img[:, :, 2] = dilation
-    orig_img[:, :, 3] = dilation
+  color = [0, 0, 0, 0]
+  new_im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT,
+      value=color)
+  return new_im
 
-    orig_img_pil = PIL.Image.open(imgFile)
-    outline_img_pil = PIL.Image.fromarray(orig_img)
-    outline_img_pil.paste(orig_img_pil, mask=orig_img_pil)
-    return pil2cairo(outline_img_pil)
+def outlineImage(imgFile, border=20, color=[1, 0, 0]):
+    orig_img = cv2.imread(imgFile, -1)
+    resized_img = resizeImageWithTransparencyNumpy(orig_img)
 
+    kernel = np.ones((border, border), np.uint8)
+    # print(orig_img)
+    
+    # # "Take the array a and add 0 rows above it, 0 rows below it, 0 columns to the left of it, and 3 columns to the right of it. Fill these columns with a constant specified by constant_values".
+    dilation = cv2.dilate(resized_img[:,:,3], kernel, iterations=1)
+
+    dilation_img = cv2.imread(imgFile, -1)
+    dilation_img = resizeImageWithTransparencyNumpy(dilation_img)
+
+    dilation_img[:, :, 0] = dilation
+    dilation_img[:, :, 1] = dilation
+    dilation_img[:, :, 2] = dilation
+    dilation_img[:, :, 3] = dilation
+
+    mask = dilation != 0 
+    print(color)
+    # dilation_img[:,:,][mask] = [color[0], color[1], color[2], 0]
+    # dilation_img[:,:,][mask] = [255, 0,0, 0]
+    # resized_img[:,:,3][mask] = 255
+
+    mask = dilation == 0 
+    print(color)
+    # transparent black - everything around the main opaque image slice
+    resized_img[:,:,][mask] = [0,0,0,0]
+
+
+    
+    # orig_img_pil = PIL.Image.open(imgFile)
+    height, width, channels = resized_img.shape
+    surface = cairo.ImageSurface.create_for_data(dilation_img, cairo.FORMAT_ARGB32, width, height)
+    surface2 = cairo.ImageSurface.create_for_data(resized_img, cairo.FORMAT_ARGB32, width, height)
+    context = cairo.Context(surface)
+    
+    context.set_source_surface(surface2, 0, 0)
+    context.paint()
+    return surface
 
 def pil2cairo(im):
     """Transform a PIL Image into a Cairo ImageSurface."""
@@ -215,7 +320,7 @@ def checkMemoization(filename, tableName, cb):
 
 def getAverageColor(filename):
     return checkMemoization(
-        filename, 'average_color', 
+        filename, 'average_color',
         lambda filename: ColorThief(filename).get_color(quality=3))
 
 
@@ -243,6 +348,7 @@ def doMain():
     ringCount = 1
     numSteps = 10
     minRadius = 50
+    maxRings = 200
 
     # offsetRadius = 800
     # minRadius = 700
@@ -250,9 +356,9 @@ def doMain():
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size_x, size_y)
     context = cairo.Context(surface)
 
-    random.shuffle(files)
+    # random.shuffle(files)
 
-    while offsetRadius >= minRadius:
+    while offsetRadius >= minRadius and ringCount < maxRings:
         filename = files.pop()
 
         image_surface = cairo.ImageSurface.create_from_png(filename)
@@ -265,7 +371,6 @@ def doMain():
             continue
 
         print(filename)
-        # image_surface = outlineImage(filename)
 
         makeRound(context=context, filename=filename, img=image_surface, centerX=size_x/2,
                   centerY=size_y/2, numSteps=numSteps, offsetRadius=offsetRadius, offsetSteps=offsetSteps)
@@ -277,7 +382,7 @@ def doMain():
         if ringCount % 3 == 0:
             numSteps *= 2
             offsetSteps = 0.5
-            offsetRadius += radiusMoveSize*1.5
+            # offsetRadius += radiusMoveSize*1.5
         if ringCount % 3 == 1:
             numSteps = int(0.5*numSteps)
             offsetSteps = 0

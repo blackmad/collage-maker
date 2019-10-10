@@ -104,7 +104,7 @@ def process_image(imagepath, filename, image):
 		fileparts = os.path.basename(filename).split('.')
 		filefrag = '_'.join(fileparts[:-1])
 		ext = 'png'
-		newFilename = '%s-%s-%s-%s.%s' % (filefrag, i, label, score, ext)
+		newFilename = '%s-%s-%s-%s.%s' % (label, filefrag, i, score, ext)
 		print(newFilename)
 		#imageio.imwrite(newFilename, masked_image)
 		output_filepath = os.path.join(outdir, 'x-' + newFilename)
@@ -126,8 +126,8 @@ def process_file(imagepath, filename):
 
 if __name__ == '__main__':
 	# Load a random image from the images folder
-	imagepath = sys.argv[1]
-	file_names = next(os.walk(imagepath))[2]
-	for filename in file_names:
-		process_file(imagepath, filename)
+  for imagepath in sys.argv[1:]:
+  	file_names = next(os.walk(imagepath))[2]
+  	for filename in file_names:
+  		process_file(imagepath, filename)
 	
