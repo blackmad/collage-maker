@@ -134,8 +134,8 @@ if __name__ == '__main__':
   for imagepath in sys.argv[1:]:
   	file_names = next(os.walk(imagepath))[2]
   	for filename in file_names:
-      try:
-  		  process_file(imagepath, filename)
-      except:
-        print('failed on ', filename)
+    	try:
+      		process_file(imagepath, filename)
+      	except:
+        	print('failed on ', filename)
 	
