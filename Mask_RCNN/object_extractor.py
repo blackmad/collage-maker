@@ -130,11 +130,11 @@ def process_file(imagepath, filename):
 
 
 if __name__ == '__main__':
-    # Load a random image from the images folder
+    # Load a random igimage from the images folder
     for imagepath in sys.argv[1:]:
         file_names = next(os.walk(imagepath))[2]
         for filename in file_names:
-        try:
-            process_file(imagepath, filename)
-        except:
-            print('failed on ', filename)
+            try:
+                process_file(imagepath, filename)
+            except:
+                print('failed on ', filename)
