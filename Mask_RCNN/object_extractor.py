@@ -67,6 +67,7 @@ def process_image(imagepath, filename, image):
 	outdir = os.path.join(imagepath, 'objects')
 	if not os.path.isdir(outdir):
 		os.mkdir(outdir)
+  
 
 	# Run detection
 	results = model.detect([image], verbose=1)
@@ -129,5 +130,8 @@ if __name__ == '__main__':
   for imagepath in sys.argv[1:]:
   	file_names = next(os.walk(imagepath))[2]
   	for filename in file_names:
-  		process_file(imagepath, filename)
+      try:
+  		  process_file(imagepath, filename)
+      except:
+        print('failed on ', filename)
 	
