@@ -27,8 +27,8 @@ MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
 # Download COCO trained weights from Releases if needed
 if not os.path.exists(COCO_MODEL_PATH):
-	print('downloading trained weights')
-	utils.download_trained_weights(COCO_MODEL_PATH)
+    print('downloading trained weights')
+    utils.download_trained_weights(COCO_MODEL_PATH)
 
 
 class InferenceConfig(coco.CocoConfig):
@@ -66,76 +66,75 @@ class_names = ['BG', 'person', 'bicycle', 'car', 'motorcycle', 'airplane',
 
 
 def process_image(imagepath, filename, image):
-	outdir = os.path.join(imagepath, 'objects')
-	if not os.path.isdir(outdir):
-		os.mkdir(outdir)
+    outdir = os.path.join(imagepath, 'objects')
+    if not os.path.isdir(outdir):
+        os.mkdir(outdir)
 
-	# Run detection
-	results = model.detect([image], verbose=1)
+    # Run detection
+    results = model.detect([image], verbose=1)
 
-	# extract objects
-	r = results[0]
+    # extract objects
+    r = results[0]
 
-	import imageio
-	N = r['rois'].shape[0]
-	scores = r['scores']
-	outputs = []
-	for i in range(N):
-		masked_image = image.copy()
-		print(len(image))
-		print(len(image[0][0]))
-		class_id = r['class_ids'][i]
-		score = scores[i] if scores is not None else None
-		label = class_names[class_id]
-		alpha = 1.0
-		mask = r['masks'][:, :, i]
-		box = r['rois'][i]
-		print(box)
-		y1, x1, y2, x2 = box
-		# for c in range(3):
-		# 	masked_image[:, :, c] = np.where(mask == False,
-		# 		0,
-		# 		image[:, :, c])
-		if len(image[0][0]) == 3:
-			masked_image = np.dstack(
-			    (masked_image, np.zeros((len(image), len(image[0])))))
+    import imageio
+    N = r['rois'].shape[0]
+    scores = r['scores']
+    outputs = []
+    for i in range(N):
+        masked_image = image.copy()
+        print(len(image))
+        print(len(image[0][0]))
+        class_id = r['class_ids'][i]
+        score = scores[i] if scores is not None else None
+        label = class_names[class_id]
+        alpha = 1.0
+        mask = r['masks'][:, :, i]
+        box = r['rois'][i]
+        print(box)
+        y1, x1, y2, x2 = box
+        # for c in range(3):
+        # 	masked_image[:, :, c] = np.where(mask == False,
+        # 		0,
+        # 		image[:, :, c])
+        if len(image[0][0]) == 3:
+            masked_image = np.dstack(
+                (masked_image, np.zeros((len(image), len(image[0])))))
 
-		masked_image[:, :, 3] = np.where(mask == False,
-			0,
-			255)
+        masked_image[:, :, 3] = np.where(mask == False,
+                                         0,
+                                         255)
 
-		fileparts = os.path.basename(filename).split('.')
-		filefrag = '_'.join(fileparts[:-1])
-		ext = 'png'
-		newFilename = '%s-%s-%s-%s.%s' % (label, filefrag, i, score, ext)
-		print(newFilename)
-		# imageio.imwrite(newFilename, masked_image)
-		output_filepath = os.path.join(outdir, 'x-' + newFilename)
-		imageio.imwrite(output_filepath, masked_image[y1:y2, x1:x2])
-		outputs.append(output_filepath)
+        fileparts = os.path.basename(filename).split('.')
+        filefrag = '_'.join(fileparts[:-1])
+        ext = 'png'
+        newFilename = '%s-%s-%s-%s.%s' % (label, filefrag, i, score, ext)
+        print(newFilename)
+        # imageio.imwrite(newFilename, masked_image)
+        output_filepath = os.path.join(outdir, 'x-' + newFilename)
+        imageio.imwrite(output_filepath, masked_image[y1:y2, x1:x2])
+        outputs.append(output_filepath)
 
-	return outputs
+    return outputs
 
-	# visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],
-	                            # class_names, )
+    # visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],
+    # class_names, )
 
 
 def process_file(imagepath, filename):
-	if '.jpg' not in filename and '.png' not in filename and '.jpeg' not in filename:
-		return []
+    if '.jpg' not in filename and '.png' not in filename and '.jpeg' not in filename:
+        return []
 
-	print('processing %s' % filename)
-	image = skimage.io.imread(os.path.join(imagepath, filename))
-	return process_image(imagepath, filename, image)
+    print('processing %s' % filename)
+    image = skimage.io.imread(os.path.join(imagepath, filename))
+    return process_image(imagepath, filename, image)
 
 
 if __name__ == '__main__':
-	# Load a random image from the images folder
-  for imagepath in sys.argv[1:]:
-  	file_names = next(os.walk(imagepath))[2]
-  	for filename in file_names:
-    	try:
-      		process_file(imagepath, filename)
-      	except:
-        	print('failed on ', filename)
-	
+    # Load a random image from the images folder
+    for imagepath in sys.argv[1:]:
+        file_names = next(os.walk(imagepath))[2]
+        for filename in file_names:
+        try:
+            process_file(imagepath, filename)
+        except:
+            print('failed on ', filename)
