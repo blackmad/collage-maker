@@ -1,5 +1,5 @@
 
-import coco
+from coco import coco
 from mrcnn import visualize
 import mrcnn.model as modellib
 from mrcnn import utils
